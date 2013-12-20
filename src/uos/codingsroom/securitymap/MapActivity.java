@@ -53,15 +53,6 @@ public class MapActivity extends Activity implements
         linearLayout.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         linearLayout.setOrientation(LinearLayout.VERTICAL);
         
-        TextView textView = new TextView(this);
-        textView.setText("Press MENU button!");
-        textView.setTextSize(18.0f);
-        textView.setGravity(Gravity.CENTER);
-        textView.setBackgroundColor(Color.DKGRAY);
-        textView.setTextColor(Color.WHITE);
-        
-        linearLayout.addView(textView);
-        
         MapView.setMapTilePersistentCacheEnabled(true);
         
         mapView = new MapView(this);
@@ -83,9 +74,9 @@ public class MapActivity extends Activity implements
     @Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		super.onCreateOptionsMenu(menu);
+		
 		menu.add(0, MENU_MAP_TYPE, Menu.NONE, "MapType");
 		menu.add(0, MENU_MAP_MOVE, Menu.NONE, "Move");
-		menu.add(0, MENU_LOCATION_TRACKING, Menu.NONE, "Location");
 		menu.add(0, MENU_MAP_OVERLAY, Menu.NONE, "Overlay");
 		
 		return true;
@@ -194,56 +185,6 @@ public class MapActivity extends Activity implements
 
 			});
 			dialog.show();			
-		}
-			return true;
-		
-		case MENU_LOCATION_TRACKING:
-		{
-			String[] mapMoveMenuItems = { "User Location On", "User Location+Heading On", "Off", "Show Location Marker", "Hide Location Marker", "Reverse Geo-coding"};
-			Builder dialog = new AlertDialog.Builder(this);
-			dialog.setTitle("Location Tracking");
-			dialog.setItems(mapMoveMenuItems, new OnClickListener() {
-				@Override
-				public void onClick(DialogInterface dialog, int which) {
-					switch (which) {
-					case 0: // User Location On
-					{
-						mapView.setCurrentLocationTrackingMode(MapView.CurrentLocationTrackingMode.TrackingModeOnWithoutHeading);
-					}
-						break;
-					case 1: // User Location+Heading On
-					{
-						mapView.setCurrentLocationTrackingMode(MapView.CurrentLocationTrackingMode.TrackingModeOnWithHeading);
-					}
-						break;
-					case 2: // Off
-					{
-						mapView.setCurrentLocationTrackingMode(MapView.CurrentLocationTrackingMode.TrackingModeOff);
-					}
-						break;
-					case 3: // Show Location Marker
-					{
-						mapView.setShowCurrentLocationMarker(true);
-					}
-						break;
-					case 4: // Hide Location Marker
-					{
-						if (mapView.isShowingCurrentLocationMarker()) {
-							mapView.setShowCurrentLocationMarker(false);	
-						}
-					}
-						break;
-					case 5: // Reverse Geo-coding
-					{
-						reverseGeoCoder = new MapReverseGeoCoder("DAUM_LOCAL_DEMO_APIKEY", mapView.getMapCenterPoint(), MapActivity.this, MapActivity.this);
-						reverseGeoCoder.startFindingAddress();
-					}
-						break;
-					}
-				}
-
-			});
-			dialog.show();
 		}
 			return true;
 			
@@ -432,8 +373,8 @@ public class MapActivity extends Activity implements
 	
 	public void onMapViewInitialized(MapView mapView) { 
 		Log.i(LOG_TAG, "MapView had loaded. Now, MapView APIs could be called safely"); 
-		//mapView.setCurrentLocationTrackingMode(MapView.CurrentLocationTrackingMode.TrackingModeOnWithoutHeading);
-		mapView.setMapCenterPointAndZoomLevel(MapPoint.mapPointWithGeoCoord(37.537229,127.005515), 2, true);
+		mapView.setCurrentLocationTrackingMode(MapView.CurrentLocationTrackingMode.TrackingModeOnWithoutHeading);
+		//mapView.setMapCenterPointAndZoomLevel(MapPoint.mapPointWithGeoCoord(37.537229,127.005515), 2, true);
 	} 
 	
 	@Override
