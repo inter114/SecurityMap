@@ -13,6 +13,8 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.DialogInterface.OnClickListener;
 import android.graphics.Color;
+import android.hardware.Camera;
+import android.hardware.Camera.Parameters;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
@@ -30,19 +32,23 @@ public class MapActivity extends Activity implements
 	MapView.POIItemEventListener,
 	MapReverseGeoCoder.ReverseGeoCodingResultListener {
 	
-	private static final int MENU_MAP_TYPE = Menu.FIRST + 1;
-	private static final int MENU_MAP_MOVE = Menu.FIRST + 2;
-	private static final int MENU_LOCATION_TRACKING = Menu.FIRST + 3;
-	private static final int MENU_MAP_OVERLAY = Menu.FIRST + 4;
+	private static final int MENU_MAP_FLASH = Menu.FIRST + 1;
 	
-	private static final String LOG_TAG = "DaumMapLibrarySample";
+	private static final String FLASH_ON = Parameters.FLASH_MODE_TORCH;
+	private static final String FLASH_OFF = Parameters.FLASH_MODE_OFF;
+	
+	private static final String LOG_TAG = "securityMAP";
 	
 	private MapView mapView;
 	private MapPOIItem poiItem;
 	private MapReverseGeoCoder reverseGeoCoder = null;
+	private String centerAddress;
+	private Camera camera;
 
-	private final String API_KEY="9ceae170ed20454fa4010dc4d4acb1ddf99f2113";
-	private final String DATA_KEY="1fbb384aa99b21afd8457926d076ce810df72716";
+	private boolean isFlashOn=false;
+	
+	private final String API_KEY="9ceae170ed20454fa4010dc4d4acb1ddf99f2113";	// 앱 API키
+	private final String DATA_KEY="b3bc0127812b7aabcc7e73900d1d69a87d194c41";	// 주소 검색할 때 필요한 API키
 	private final String TITLE="안전지도";
 	
     /** Called when the activity is first created. */
@@ -66,7 +72,6 @@ public class MapActivity extends Activity implements
         mapView.setCurrentLocationEventListener(this);
         mapView.setPOIItemEventListener(this);
         
-        //mapView.setMapType(MapView.MapType.Hybrid);
         mapView.setMapType(MapView.MapType.Standard);
         
         linearLayout.addView(mapView);
@@ -78,8 +83,7 @@ public class MapActivity extends Activity implements
 	public boolean onCreateOptionsMenu(Menu menu) {
 		super.onCreateOptionsMenu(menu);
 		
-		menu.add(0, MENU_MAP_TYPE, Menu.NONE, "지도 종류");
-		menu.add(0, MENU_MAP_OVERLAY, Menu.NONE, "Overlay");
+		menu.add(0, MENU_MAP_FLASH, Menu.NONE, "플래시");
 		
 		return true;
 	}
@@ -90,29 +94,34 @@ public class MapActivity extends Activity implements
 		final int itemId = item.getItemId();
 		
 		switch (itemId) {
-		case MENU_MAP_TYPE:
+		case MENU_MAP_FLASH:
 		{
-			String[] mapTypeMenuItems = {"일반", "위성", "하이브리드"};
+			String[] flashMenuItems = {"플래시 켜기", "플래시 끄기"};
 
 			Builder dialog = new AlertDialog.Builder(this);
-			dialog.setTitle("Map Type");
-			dialog.setItems(mapTypeMenuItems, new OnClickListener() {
+			dialog.setTitle("플래시");
+			dialog.setItems(flashMenuItems, new OnClickListener() {
 				@Override
 				public void onClick(DialogInterface dialog, int which) {
 					switch (which) {
 					case 0: // Standard
 					{
-						mapView.setMapType(MapView.MapType.Standard);
+						synchronized(this) {
+							Parameters p = camera.getParameters();
+							p.setFlashMode(Parameters.FLASH_MODE_TORCH);
+							camera.setParameters(p);
+							camera.startPreview();
+						}
 					}
 						break;
 					case 1: // Satellite
 					{
-						mapView.setMapType(MapView.MapType.Satellite);
-					}
-						break;
-					case 2: // Hybrid
-					{
-						mapView.setMapType(MapView.MapType.Hybrid);
+						synchronized(this) {
+							Parameters p = camera.getParameters();
+							p.setFlashMode(Parameters.FLASH_MODE_OFF);
+							camera.setParameters(p);
+							camera.stopPreview();
+						}
 					}
 						break;
 					}
@@ -136,13 +145,19 @@ public class MapActivity extends Activity implements
 		Log.i(LOG_TAG,	String.format("Open API Key Authentication Result : code=%d, message=%s", resultCode, resultMessage));	
 	}
 	
-	/////////////////////////////////////////////////////////////////////////////////////////////////
-	// net.daum.mf.map.api.MapView.MapViewEventListener
-	
+	// 맵 최초 실행시 실행되는 부분
 	public void onMapViewInitialized(MapView mapView) { 
 		Log.i(LOG_TAG, "MapView had loaded. Now, MapView APIs could be called safely"); 
+		
+		// 변수 초기화
+		camera = Camera.open();
+		
 		// 어플리케이션을 처음 실행 시 지도를 현재 위치로 이동해준다
 		mapView.setCurrentLocationTrackingMode(MapView.CurrentLocationTrackingMode.TrackingModeOnWithoutHeading);
+		
+		// 현재 위치를 받아온다
+		reverseGeoCoder = new MapReverseGeoCoder(DATA_KEY, mapView.getMapCenterPoint(), MapActivity.this, MapActivity.this);
+		reverseGeoCoder.startFindingAddress();
 	} 
 	
 	@Override
@@ -151,6 +166,7 @@ public class MapActivity extends Activity implements
 		Log.i(LOG_TAG, String.format("MapView onMapViewCenterPointMoved (%f,%f)", mapPointGeo.latitude, mapPointGeo.longitude));
 	}
 
+	// 맵을 두번 빠르게 탭 했을 때 실행되는 부분
 	@Override
 	public void onMapViewDoubleTapped(MapView mapView, MapPoint mapPoint) {
 		
@@ -163,15 +179,19 @@ public class MapActivity extends Activity implements
 		alertDialog.show();
 	}
 
+	// 지도를 길게 눌렀을 때 표시되는 부분
 	@Override
 	public void onMapViewLongPressed(final MapView mapView, MapPoint mapPoint) {
 
 		final MapPoint.GeoCoordinate mapPointGeo = mapPoint.getMapPointGeoCoord();
+
+		reverseGeoCoder = new MapReverseGeoCoder(DATA_KEY, mapView.getMapCenterPoint(), MapActivity.this, MapActivity.this);
+		reverseGeoCoder.startFindingAddress();
 		
 		String[] mapTypeMenuItems = {"정보 추가하기"};
 		
 		Builder dialog = new AlertDialog.Builder(this);
-		dialog.setTitle(TITLE);
+		dialog.setTitle(centerAddress);
 		dialog.setItems(mapTypeMenuItems, new OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
@@ -179,7 +199,7 @@ public class MapActivity extends Activity implements
 				case 0: // 위치 추가
 				{
 					poiItem = new MapPOIItem();
-					poiItem.setItemName("City on a Hill");
+					poiItem.setItemName(centerAddress);
 					poiItem.setMapPoint(MapPoint.mapPointWithGeoCoord(mapPointGeo.latitude,mapPointGeo.longitude));
 					poiItem.setMarkerType(MapPOIItem.MarkerType.BluePin);
 					poiItem.setShowAnimationType(MapPOIItem.ShowAnimationType.DropFromHeaven);
@@ -193,20 +213,18 @@ public class MapActivity extends Activity implements
 		dialog.show();
 	}
 
+	// 지도를 한번만 탭 했을 때 표시되는 부분
 	@Override
 	public void onMapViewSingleTapped(MapView mapView, MapPoint mapPoint) {
 		MapPoint.GeoCoordinate mapPointGeo = mapPoint.getMapPointGeoCoord();
 		Log.i(LOG_TAG, String.format("MapView onMapViewSingleTapped (%f,%f)", mapPointGeo.latitude, mapPointGeo.longitude));
 	}
 
+	// 지도의 줌 레벨을 변경하였을 때 표시되는 부분
 	@Override
 	public void onMapViewZoomLevelChanged(MapView mapView, int zoomLevel) {
 		Log.i(LOG_TAG, String.format("MapView onMapViewZoomLevelChanged (%d)", zoomLevel));
 	}
-	
-	
-	/////////////////////////////////////////////////////////////////////////////////////////////////
-	// net.daum.mf.map.api.MapView.CurrentLocationEventListener
 	
 	@Override
 	public void onCurrentLocationUpdate(MapView mapView, MapPoint currentLocation, float accuracyInMeters) {
@@ -234,10 +252,7 @@ public class MapActivity extends Activity implements
 		Log.i(LOG_TAG, "MapView onCurrentLocationUpdateCancelled");
 	}
 	
-	
-	/////////////////////////////////////////////////////////////////////////////////////////////////
-	// net.daum.mf.map.api.MapView.POIItemEventListener
-	
+	// 마커 아이템 선택하였을 때 실행되는 부분
 	@Override
 	public void onPOIItemSelected(MapView mapView, MapPOIItem poiItem) {
 		Log.i(LOG_TAG, String.format("MapPOIItem(%s) is selected", poiItem.getItemName()));
@@ -276,6 +291,7 @@ public class MapActivity extends Activity implements
 		alertDialog.show();
 	}
 
+	// 마커를 이동하였을 때 표시되는 부분
 	@Override
 	public void onDraggablePOIItemMoved(MapView mapView, MapPOIItem poiItem, MapPoint newMapPoint) {
 		
@@ -288,22 +304,15 @@ public class MapActivity extends Activity implements
 		alertDialog.show();
 	}
 
-	/////////////////////////////////////////////////////////////////////////////////////////////////
-	// net.daum.mf.map.api.MapReverseGeoCoder.ReverseGeoCodingResultListener
-	
+	// 지도의 주소를 찾았을 때 실행되는 부분
 	@Override
 	public void onReverseGeoCoderFoundAddress(MapReverseGeoCoder rGeoCoder, String addressString) {
 		
-		String alertMessage = String.format("Center Point Address = [%s]", addressString);
-		AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
-		alertDialog.setTitle("DaumMapLibrarySample");
-		alertDialog.setMessage(alertMessage);
-		alertDialog.setPositiveButton("OK", null);
-		alertDialog.show();
-		
+		centerAddress = addressString;
 		reverseGeoCoder = null;
 	}
 	
+	// 주소를 찾지 못했을 때 실행되는 부분
 	@Override
 	public void onReverseGeoCoderFailedToFindAddress(MapReverseGeoCoder rGeoCoder) {
 		AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
@@ -314,5 +323,4 @@ public class MapActivity extends Activity implements
 		
 		reverseGeoCoder = null;
 	}
-
 }
